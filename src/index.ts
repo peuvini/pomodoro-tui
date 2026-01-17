@@ -1,8 +1,14 @@
 import blessed from 'blessed';
 import { parseArgs } from 'util';
 import { Pomodoro } from './pomodoro';
+import { HistoryManager } from './history';
 import type { PomodoroConfig, PomodoroState, SessionType } from './types';
 import { DEFAULT_CONFIG } from './types';
+
+interface AppConfig {
+  pomodoro: PomodoroConfig;
+  historyFile?: string;
+}
 
 function showHelp(): void {
   console.log(`
@@ -15,19 +21,25 @@ Options:
   -s, --short <minutes>    Short break duration (default: ${DEFAULT_CONFIG.shortBreakDuration})
   -l, --long <minutes>     Long break duration (default: ${DEFAULT_CONFIG.longBreakDuration})
   -c, --cycles <number>    Pomodoros before long break (default: ${DEFAULT_CONFIG.pomodorosBeforeLongBreak})
+  -d, --data <path>        Path to history JSON file (default: ~/.pomodoro/history.json)
   -h, --help               Show this help message
 
 Examples:
   bun run start                     # Use default durations (25/5/15)
   bun run start -w 50 -s 10 -l 30   # 50min work, 10min short, 30min long
   bun run start --work 45           # 45min work sessions
+  bun run start -d ~/obsidian/pomodoro.json  # Custom history file
 
 Controls:
   [s] Start    [p] Pause    [r] Reset    [n] Next    [q] Quit
+
+History:
+  Completed sessions are saved to the history file in JSON format.
+  Each entry includes: timestamp, session type, duration, and daily count.
 `);
 }
 
-function parseConfig(): PomodoroConfig | null {
+function parseConfig(): AppConfig | null {
   try {
     const { values } = parseArgs({
       args: Bun.argv.slice(2),
@@ -36,6 +48,7 @@ function parseConfig(): PomodoroConfig | null {
         short: { type: 'string', short: 's' },
         long: { type: 'string', short: 'l' },
         cycles: { type: 'string', short: 'c' },
+        data: { type: 'string', short: 'd' },
         help: { type: 'boolean', short: 'h' },
       },
       strict: true,
@@ -46,7 +59,7 @@ function parseConfig(): PomodoroConfig | null {
       return null;
     }
 
-    const config: PomodoroConfig = { ...DEFAULT_CONFIG };
+    const pomodoro: PomodoroConfig = { ...DEFAULT_CONFIG };
 
     if (values.work) {
       const work = parseInt(values.work, 10);
@@ -54,7 +67,7 @@ function parseConfig(): PomodoroConfig | null {
         console.error('Error: Work duration must be a positive number');
         process.exit(1);
       }
-      config.workDuration = work;
+      pomodoro.workDuration = work;
     }
 
     if (values.short) {
@@ -63,7 +76,7 @@ function parseConfig(): PomodoroConfig | null {
         console.error('Error: Short break duration must be a positive number');
         process.exit(1);
       }
-      config.shortBreakDuration = short;
+      pomodoro.shortBreakDuration = short;
     }
 
     if (values.long) {
@@ -72,7 +85,7 @@ function parseConfig(): PomodoroConfig | null {
         console.error('Error: Long break duration must be a positive number');
         process.exit(1);
       }
-      config.longBreakDuration = long;
+      pomodoro.longBreakDuration = long;
     }
 
     if (values.cycles) {
@@ -81,10 +94,13 @@ function parseConfig(): PomodoroConfig | null {
         console.error('Error: Cycles must be a positive number');
         process.exit(1);
       }
-      config.pomodorosBeforeLongBreak = cycles;
+      pomodoro.pomodorosBeforeLongBreak = cycles;
     }
 
-    return config;
+    return {
+      pomodoro,
+      historyFile: values.data,
+    };
   } catch (error) {
     if (error instanceof Error) {
       console.error(`Error: ${error.message}`);
@@ -96,6 +112,7 @@ function parseConfig(): PomodoroConfig | null {
 
 class PomodoroTUI {
   private pomodoro: Pomodoro;
+  private history: HistoryManager;
   private screen: blessed.Widgets.Screen;
   private timerBox: blessed.Widgets.BoxElement;
   private sessionBox: blessed.Widgets.BoxElement;
@@ -104,8 +121,9 @@ class PomodoroTUI {
   private statusBox: blessed.Widgets.BoxElement;
   private configBox: blessed.Widgets.BoxElement;
 
-  constructor(config: PomodoroConfig) {
-    this.pomodoro = new Pomodoro(config);
+  constructor(config: AppConfig) {
+    this.pomodoro = new Pomodoro(config.pomodoro);
+    this.history = new HistoryManager(config.historyFile);
 
     // Create screen
     this.screen = blessed.screen({
@@ -204,13 +222,14 @@ class PomodoroTUI {
     });
 
     // Stats display
+    const todayStats = this.history.getTodayStats();
     this.statsBox = blessed.box({
       parent: mainBox,
       top: 12,
       left: 'center',
       width: 'shrink',
       height: 1,
-      content: 'Completed: 0 pomodoros',
+      content: `Today: ${todayStats.pomodoros} pomodoros (${todayStats.totalMinutes}m)`,
       style: {
         fg: 'gray',
       },
@@ -333,7 +352,8 @@ class PomodoroTUI {
     this.statusBox.style.fg = state.isRunning ? 'green' : 'yellow';
 
     // Update stats
-    this.statsBox.setContent(`Completed: ${state.completedPomodoros} pomodoros`);
+    const todayStats = this.history.getTodayStats();
+    this.statsBox.setContent(`Today: ${todayStats.pomodoros} pomodoros (${todayStats.totalMinutes}m)`);
 
     // Update screen title
     this.screen.title = `${time} - ${this.getSessionLabel(session)}`;
@@ -352,7 +372,13 @@ class PomodoroTUI {
     }
   }
 
-  private onSessionComplete(_session: SessionType): void {
+  private async onSessionComplete(session: SessionType): Promise<void> {
+    const config = this.pomodoro.getConfig();
+    const duration = this.getSessionDuration(session, config);
+
+    // Save to history
+    await this.history.addEntry(session, duration);
+
     this.notifyUser();
   }
 

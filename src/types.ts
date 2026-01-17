@@ -20,3 +20,18 @@ export const DEFAULT_CONFIG: PomodoroConfig = {
   longBreakDuration: 15,
   pomodorosBeforeLongBreak: 4,
 };
+
+export interface PomodoroHistoryEntry {
+  id: string;
+  sessionType: SessionType;
+  duration: number;        // in minutes
+  completedAt: string;     // ISO 8601 timestamp
+  date: string;            // YYYY-MM-DD for easy filtering
+  pomodoroNumber: number;  // nth pomodoro of the day
+}
+
+export interface PomodoroHistory {
+  entries: PomodoroHistoryEntry[];
+  totalPomodoros: number;
+  lastUpdated: string;
+}
