@@ -2,12 +2,15 @@ import blessed from 'blessed';
 import { parseArgs } from 'util';
 import { Pomodoro } from './pomodoro';
 import { HistoryManager } from './history';
+import { MusicManager, type MusicMode } from './music';
 import type { PomodoroConfig, PomodoroState, SessionType } from './types';
 import { DEFAULT_CONFIG } from './types';
 
 interface AppConfig {
   pomodoro: PomodoroConfig;
   historyFile?: string;
+  musicMode: MusicMode;
+  spotifyToken?: string;
 }
 
 function showHelp(): void {
@@ -22,6 +25,8 @@ Options:
   -l, --long <minutes>     Long break duration (default: ${DEFAULT_CONFIG.longBreakDuration})
   -c, --cycles <number>    Pomodoros before long break (default: ${DEFAULT_CONFIG.pomodorosBeforeLongBreak})
   -d, --data <path>        Path to history JSON file (default: ~/.pomodoro/history.json)
+  -m, --music <mode>       Music mode: radio, spotify, off (default: radio)
+  --spotify-token <token>  Spotify access token for now-playing display
   -h, --help               Show this help message
 
 Examples:
@@ -29,9 +34,16 @@ Examples:
   bun run start -w 50 -s 10 -l 30   # 50min work, 10min short, 30min long
   bun run start --work 45           # 45min work sessions
   bun run start -d ~/obsidian/pomodoro.json  # Custom history file
+  bun run start -m off              # Disable music
+  bun run start -m spotify --spotify-token <token>  # Spotify mode
 
 Controls:
   [s] Start    [p] Pause    [r] Reset    [n] Next    [q] Quit
+  [m] Toggle music    [>] Next station
+
+Music:
+  Lofi radio plays automatically during work sessions and pauses during breaks.
+  Requires mpv, ffplay, or vlc installed for audio playback.
 
 History:
   Completed sessions are saved to the history file in JSON format.
@@ -49,6 +61,8 @@ function parseConfig(): AppConfig | null {
         long: { type: 'string', short: 'l' },
         cycles: { type: 'string', short: 'c' },
         data: { type: 'string', short: 'd' },
+        music: { type: 'string', short: 'm' },
+        'spotify-token': { type: 'string' },
         help: { type: 'boolean', short: 'h' },
       },
       strict: true,
@@ -97,9 +111,21 @@ function parseConfig(): AppConfig | null {
       pomodoro.pomodorosBeforeLongBreak = cycles;
     }
 
+    // Parse music mode
+    let musicMode: MusicMode = 'radio';
+    if (values.music) {
+      if (!['radio', 'spotify', 'off'].includes(values.music)) {
+        console.error('Error: Music mode must be one of: radio, spotify, off');
+        process.exit(1);
+      }
+      musicMode = values.music as MusicMode;
+    }
+
     return {
       pomodoro,
       historyFile: values.data,
+      musicMode,
+      spotifyToken: values['spotify-token'],
     };
   } catch (error) {
     if (error instanceof Error) {
@@ -113,17 +139,21 @@ function parseConfig(): AppConfig | null {
 class PomodoroTUI {
   private pomodoro: Pomodoro;
   private history: HistoryManager;
+  private music: MusicManager;
   private screen: blessed.Widgets.Screen;
+  private mainBox: blessed.Widgets.BoxElement;
   private timerBox: blessed.Widgets.BoxElement;
   private sessionBox: blessed.Widgets.BoxElement;
   private progressBar: blessed.Widgets.ProgressBarElement;
   private statsBox: blessed.Widgets.BoxElement;
   private statusBox: blessed.Widgets.BoxElement;
   private configBox: blessed.Widgets.BoxElement;
+  private musicBox: blessed.Widgets.BoxElement;
 
   constructor(config: AppConfig) {
     this.pomodoro = new Pomodoro(config.pomodoro);
     this.history = new HistoryManager(config.historyFile);
+    this.music = new MusicManager(config.musicMode, config.spotifyToken);
 
     // Create screen
     this.screen = blessed.screen({
@@ -132,12 +162,12 @@ class PomodoroTUI {
     });
 
     // Create main container
-    const mainBox = blessed.box({
+    this.mainBox = blessed.box({
       parent: this.screen,
       top: 'center',
       left: 'center',
       width: 50,
-      height: 20,
+      height: 22,
       border: {
         type: 'line',
       },
@@ -150,7 +180,7 @@ class PomodoroTUI {
 
     // Title
     blessed.box({
-      parent: mainBox,
+      parent: this.mainBox,
       top: 0,
       left: 'center',
       width: 'shrink',
@@ -164,7 +194,7 @@ class PomodoroTUI {
 
     // Session type display
     this.sessionBox = blessed.box({
-      parent: mainBox,
+      parent: this.mainBox,
       top: 2,
       left: 'center',
       width: 'shrink',
@@ -179,7 +209,7 @@ class PomodoroTUI {
     // Timer display
     const initialTime = this.pomodoro.formatTime(this.pomodoro.getState().timeRemaining);
     this.timerBox = blessed.box({
-      parent: mainBox,
+      parent: this.mainBox,
       top: 4,
       left: 'center',
       width: 'shrink',
@@ -193,7 +223,7 @@ class PomodoroTUI {
 
     // Progress bar
     this.progressBar = blessed.progressbar({
-      parent: mainBox,
+      parent: this.mainBox,
       top: 8,
       left: 2,
       width: 44,
@@ -210,7 +240,7 @@ class PomodoroTUI {
 
     // Status display (Running/Paused)
     this.statusBox = blessed.box({
-      parent: mainBox,
+      parent: this.mainBox,
       top: 10,
       left: 'center',
       width: 'shrink',
@@ -224,7 +254,7 @@ class PomodoroTUI {
     // Stats display
     const todayStats = this.history.getTodayStats();
     this.statsBox = blessed.box({
-      parent: mainBox,
+      parent: this.mainBox,
       top: 12,
       left: 'center',
       width: 'shrink',
@@ -238,7 +268,7 @@ class PomodoroTUI {
     // Config display
     const cfg = this.pomodoro.getConfig();
     this.configBox = blessed.box({
-      parent: mainBox,
+      parent: this.mainBox,
       top: 14,
       left: 'center',
       width: 'shrink',
@@ -249,14 +279,27 @@ class PomodoroTUI {
       },
     });
 
-    // Controls help
-    blessed.box({
-      parent: mainBox,
+    // Music status
+    this.musicBox = blessed.box({
+      parent: this.mainBox,
       top: 16,
       left: 'center',
       width: 'shrink',
       height: 1,
-      content: '[s]tart [p]ause [r]eset [n]ext [q]uit',
+      content: this.music.getStatusText(),
+      style: {
+        fg: 'magenta',
+      },
+    });
+
+    // Controls help
+    blessed.box({
+      parent: this.mainBox,
+      top: 18,
+      left: 'center',
+      width: 'shrink',
+      height: 1,
+      content: '[s]tart [p]ause [r]eset [n]ext [q]uit [m]usic [>]station',
       style: {
         fg: 'cyan',
       },
@@ -300,6 +343,7 @@ class PomodoroTUI {
   private setupKeyBindings(): void {
     // Quit
     this.screen.key(['q', 'C-c', 'escape'], () => {
+      this.music.cleanup();
       const state = this.pomodoro.getState();
       this.screen.destroy();
       console.log(`\nGoodbye! You completed ${state.completedPomodoros} pomodoros.`);
@@ -309,6 +353,12 @@ class PomodoroTUI {
     // Start
     this.screen.key(['s'], () => {
       this.pomodoro.start();
+      // Auto-play music when work session starts
+      const state = this.pomodoro.getState();
+      if (state.currentSession === 'work') {
+        this.music.play();
+        this.updateMusicStatus();
+      }
     });
 
     // Pause
@@ -326,6 +376,23 @@ class PomodoroTUI {
     this.screen.key(['n'], () => {
       this.pomodoro.skip();
     });
+
+    // Toggle music
+    this.screen.key(['m'], async () => {
+      await this.music.toggle();
+      this.updateMusicStatus();
+    });
+
+    // Next station
+    this.screen.key(['>','.'], () => {
+      this.music.nextStation();
+      this.updateMusicStatus();
+    });
+  }
+
+  private updateMusicStatus(): void {
+    this.musicBox.setContent(this.music.getStatusText());
+    this.screen.render();
   }
 
   private render(state: PomodoroState): void {
@@ -355,6 +422,9 @@ class PomodoroTUI {
     const todayStats = this.history.getTodayStats();
     this.statsBox.setContent(`Today: ${todayStats.pomodoros} pomodoros (${todayStats.totalMinutes}m)`);
 
+    // Update music status
+    this.musicBox.setContent(this.music.getStatusText());
+
     // Update screen title
     this.screen.title = `${time} - ${this.getSessionLabel(session)}`;
 
@@ -378,6 +448,17 @@ class PomodoroTUI {
 
     // Save to history
     await this.history.addEntry(session, duration);
+
+    // Handle music based on next session
+    const nextState = this.pomodoro.getState();
+    if (nextState.currentSession === 'work') {
+      // Starting work session - play music
+      await this.music.play();
+    } else {
+      // Starting break - pause music
+      this.music.pause();
+    }
+    this.updateMusicStatus();
 
     this.notifyUser();
   }
