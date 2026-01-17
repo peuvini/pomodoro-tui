@@ -1,17 +1,20 @@
 {
   "name": "pomodoro-app",
   "version": "1.0.0",
-  "description": "A simple Pomodoro timer CLI app",
-  "main": "dist/index.js",
+  "description": "A Pomodoro timer TUI app",
+  "main": "src/index.ts",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc && node dist/index.js"
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts"
   },
-  "keywords": ["pomodoro", "timer", "productivity"],
+  "keywords": ["pomodoro", "timer", "productivity", "tui"],
   "license": "MIT",
+  "dependencies": {
+    "blessed": "^0.1.81"
+  },
   "devDependencies": {
-    "typescript": "^5.3.0",
-    "@types/node": "^20.10.0"
+    "@types/blessed": "^0.1.25",
+    "@types/bun": "latest",
+    "typescript": "^5.3.0"
   }
 }
