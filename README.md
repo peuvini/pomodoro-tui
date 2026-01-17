@@ -1,6 +1,6 @@
 # Pomodoro Timer TUI
 
-A terminal-based Pomodoro timer with lofi music integration, built with Bun and blessed.
+A terminal-based Pomodoro timer with lofi music integration, built with Bun, Ink, and React.
 
 ## Features
 
@@ -13,8 +13,9 @@ A terminal-based Pomodoro timer with lofi music integration, built with Bun and 
 
 ## Requirements
 
-- [Bun](https://bun.sh/) runtime
+- [Bun](https://bun.sh/) runtime (for development)
 - For music playback (optional): `mpv`, `ffplay`, `cvlc`, or `mplayer`
+- **Note**: The compiled executable does not require Bun to be installed
 
 ## Installation
 
@@ -49,6 +50,31 @@ brew install mpv
 # Or use winget:
 winget install mpv
 ```
+
+## Building a Standalone Executable
+
+You can build a single-file executable that includes the Bun runtime and all dependencies:
+
+```bash
+bun run build
+```
+
+This creates a `pomotui` executable that can be distributed and run without requiring Bun to be installed:
+
+```bash
+# Run the executable directly
+./pomotui
+
+# With options
+./pomotui --work 50 --short 10
+```
+
+The executable is platform-specific:
+- Built on macOS → runs on macOS
+- Built on Linux → runs on Linux
+- Built on Windows → runs on Windows
+
+To distribute to multiple platforms, build on each target platform or use cross-compilation tools.
 
 ## Usage
 
