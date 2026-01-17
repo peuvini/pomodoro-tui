@@ -139,12 +139,15 @@ bun run start -d ~/obsidian/pomodoro.json
 
 ### Lofi Radio (Default)
 
-The app includes 5 curated lofi radio stations:
+The app includes 8 curated radio stations:
 - Lofi Girl
 - ChillHop
 - Box Lofi
 - Lofi Cafe
 - Study Beats
+- Antena 1
+- FM Sergipe
+- Smooth Jazz
 
 Music automatically plays during work sessions and pauses during breaks.
 

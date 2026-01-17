@@ -34,6 +34,18 @@ export const LOFI_STATIONS: LofiStation[] = [
     name: 'Study Beats',
     url: 'https://stream.zeno.fm/yn65fsaurfhvv',
   },
+  {
+    name: 'Antena 1',
+    url: 'https://radio.garden/api/ara/content/listen/Q6JROd6G/channel.mp3',
+  },
+  {
+    name: 'FM Sergipe',
+    url: 'https://radio.garden/api/ara/content/listen/EQzCDHL3/channel.mp3',
+  },
+  {
+    name: 'Smooth Jazz',
+    url: 'https://radio.garden/api/ara/content/listen/1vlrqH6v/channel.mp3',
+  },
 ];
 
 export class RadioPlayer {
