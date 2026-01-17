@@ -8,7 +8,7 @@ export interface JamConfig {
   enabled: boolean;
   isHost: boolean;
   sessionCode?: string;
-  participantName: string;
+  participantName?: string;
   server?: string;
 }
 
@@ -39,7 +39,7 @@ Options:
 Jam Session (collaborative mode):
   --host                   Host a new jam session
   --join <code>            Join an existing jam session by code
-  --name <name>            Your display name in the session (default: User)
+  --name <name>            Your display name in the session (uses saved name)
   --server <url>           Custom PartyKit server URL
 
 Examples:
@@ -184,7 +184,7 @@ export function parseConfig(): AppConfig | null {
       enabled: jamEnabled,
       isHost,
       sessionCode,
-      participantName: values.name || "User",
+      participantName: values.name,
       server: values.server,
     };
 

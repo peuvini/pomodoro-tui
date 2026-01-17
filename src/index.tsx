@@ -17,6 +17,8 @@ import {
   GroupTab,
   Controls,
 } from "./components";
+import { TaskManager, type Task } from "./tasks";
+import { SettingsManager } from "./settings";
 
 interface PomodoroTUIProps {
   config: ReturnType<typeof parseConfig> & {};
@@ -35,8 +37,23 @@ function PomodoroTUI({ config }: PomodoroTUIProps) {
   const [joinMode, setJoinMode] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [editNameMode, setEditNameMode] = useState(false);
-  const [userName, setUserName] = useState(config.jam.participantName || "User");
+  const [settingsManager] = useState(() => new SettingsManager());
+  const [userName, setUserNameState] = useState(() =>
+    config.jam.participantName || settingsManager.getUserName()
+  );
   const [nameInput, setNameInput] = useState("");
+
+  const setUserName = (name: string) => {
+    setUserNameState(name);
+    settingsManager.setUserName(name);
+  };
+
+  // Task tracker state
+  const [taskManager] = useState(() => new TaskManager());
+  const [tasks, setTasks] = useState<Task[]>(() => taskManager.getTasks());
+  const [selectedTaskIndex, setSelectedTaskIndex] = useState(0);
+  const [addTaskMode, setAddTaskMode] = useState(false);
+  const [taskInput, setTaskInput] = useState("");
 
   // Jam session state
   const [jamManager, setJamManager] = useState<JamManager | null>(null);
@@ -153,6 +170,21 @@ function PomodoroTUI({ config }: PomodoroTUIProps) {
 
   // Input handling
   useInput((input, key) => {
+    // Add task mode
+    if (addTaskMode) {
+      if (key.escape) { setAddTaskMode(false); setTaskInput(""); return; }
+      if (key.return) {
+        if (taskInput.trim().length > 0) {
+          taskManager.add(taskInput.trim());
+          setTasks(taskManager.getTasks());
+        }
+        setAddTaskMode(false); setTaskInput(""); return;
+      }
+      if (key.backspace || key.delete) { setTaskInput((p) => p.slice(0, -1)); return; }
+      if (input && input.length > 0) setTaskInput((p) => p + input);
+      return;
+    }
+
     // Name edit mode
     if (editNameMode) {
       if (key.escape) { setEditNameMode(false); setNameInput(""); return; }
@@ -183,7 +215,59 @@ function PomodoroTUI({ config }: PomodoroTUIProps) {
       return;
     }
 
-    // Tab switching
+    // Task navigation with Up/Down arrows (Timer tab only)
+    if (key.upArrow && activeTab === "timer") {
+      const allTasks = [...taskManager.getPending(), ...taskManager.getCompleted()];
+      if (allTasks.length > 0) {
+        setSelectedTaskIndex((p) => (p - 1 + allTasks.length) % allTasks.length);
+      }
+      return;
+    }
+    if (key.downArrow && activeTab === "timer") {
+      const allTasks = [...taskManager.getPending(), ...taskManager.getCompleted()];
+      if (allTasks.length > 0) {
+        setSelectedTaskIndex((p) => (p + 1) % allTasks.length);
+      }
+      return;
+    }
+
+    // Toggle task with Space (Timer tab only)
+    if (input === " " && activeTab === "timer") {
+      const allTasks = [...taskManager.getPending(), ...taskManager.getCompleted()];
+      if (allTasks[selectedTaskIndex]) {
+        taskManager.toggle(allTasks[selectedTaskIndex].id);
+        setTasks(taskManager.getTasks());
+        // Adjust selection if needed
+        const newAllTasks = [...taskManager.getPending(), ...taskManager.getCompleted()];
+        if (selectedTaskIndex >= newAllTasks.length) {
+          setSelectedTaskIndex(Math.max(0, newAllTasks.length - 1));
+        }
+      }
+      return;
+    }
+
+    // Add task mode with 'a' (Timer tab only)
+    if (input === "a" && activeTab === "timer") {
+      setAddTaskMode(true);
+      setTaskInput("");
+      return;
+    }
+
+    // Delete task with 'd' (Timer tab only)
+    if (input === "d" && activeTab === "timer") {
+      const allTasks = [...taskManager.getPending(), ...taskManager.getCompleted()];
+      if (allTasks[selectedTaskIndex]) {
+        taskManager.delete(allTasks[selectedTaskIndex].id);
+        setTasks(taskManager.getTasks());
+        const newAllTasks = [...taskManager.getPending(), ...taskManager.getCompleted()];
+        if (selectedTaskIndex >= newAllTasks.length) {
+          setSelectedTaskIndex(Math.max(0, newAllTasks.length - 1));
+        }
+      }
+      return;
+    }
+
+    // Tab switching with Tab and Left/Right arrows
     if (key.tab || key.rightArrow) {
       setActiveTab((p) => TABS[(TABS.indexOf(p) + 1) % TABS.length]);
       return;
@@ -262,6 +346,10 @@ function PomodoroTUI({ config }: PomodoroTUIProps) {
           todayStats={todayStats}
           musicStatus={musicStatus}
           formatTime={pomodoro.formatTime.bind(pomodoro)}
+          tasks={tasks}
+          selectedTaskIndex={selectedTaskIndex}
+          addTaskMode={addTaskMode}
+          taskInput={taskInput}
         />
       )}
 
