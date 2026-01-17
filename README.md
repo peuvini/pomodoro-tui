@@ -11,22 +11,38 @@ A terminal-based Pomodoro timer with lofi music integration, built with Bun, Ink
 - Session history saved to JSON (for Obsidian/tool integration)
 - Cross-platform notification sounds
 
-## Requirements
-
-- [Bun](https://bun.sh/) runtime (for development)
-- For music playback (optional): `mpv`, `ffplay`, `cvlc`, or `mplayer`
-- **Note**: The compiled executable does not require Bun to be installed
-
 ## Installation
 
-```bash
-# Clone the repository
-git clone <repo-url>
-cd pomodoro-app
+### Quick Install (Recommended)
 
-# Install dependencies
-bun install
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/treepo1/pomodoro-tui/master/install.sh | bash
 ```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/treepo1/pomodoro-tui/master/install.ps1 | iex
+```
+
+### Manual Installation
+
+Download the latest release from [GitHub Releases](https://github.com/treepo1/pomodoro-tui/releases) and add it to your PATH.
+
+### Build from Source
+
+Requires [Bun](https://bun.sh/) runtime.
+
+```bash
+git clone https://github.com/treepo1/pomodoro-tui.git
+cd pomodoro-tui
+bun install
+bun run build
+```
+
+## Requirements
+
+- For music playback (optional): `mpv`, `ffplay`, `cvlc`, or `mplayer`
 
 ### Installing Audio Players (for music)
 
