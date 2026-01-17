@@ -227,19 +227,29 @@ function getSessionDuration(
 
 function notifyUser(): void {
   const platform = process.platform;
-  let command: string;
 
-  if (platform === "darwin") {
-    command = "afplay /System/Library/Sounds/Glass.aiff";
-  } else if (platform === "win32") {
-    command =
-      "powershell -c \"(New-Object Media.SoundPlayer 'C:\\Windows\\Media\\notify.wav').PlaySync()\"";
-  } else {
-    command =
-      "paplay /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null || aplay /usr/share/sounds/alsa/Front_Center.wav 2>/dev/null || true";
+  try {
+    if (platform === "darwin") {
+      Bun.spawn(["afplay", "/System/Library/Sounds/Glass.aiff"], {
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+    } else if (platform === "win32") {
+      // Use SystemSounds which is locale-independent
+      Bun.spawn(
+        ["powershell", "-c", "[System.Media.SystemSounds]::Asterisk.Play()"],
+        { stdout: "ignore", stderr: "ignore" }
+      );
+    } else {
+      // Linux - try paplay first, fall back to aplay
+      Bun.spawn(["sh", "-c", "paplay /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null || aplay /usr/share/sounds/alsa/Front_Center.wav 2>/dev/null || true"], {
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+    }
+  } catch {
+    // Ignore errors if sound fails to play
   }
-
-  Bun.spawn(["sh", "-c", command], { stdout: "ignore", stderr: "ignore" });
 }
 
 interface PomodoroTUIProps {
