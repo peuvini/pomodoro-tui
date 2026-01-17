@@ -1,0 +1,17 @@
+{
+  "name": "pomodoro-app",
+  "version": "1.0.0",
+  "description": "A simple Pomodoro timer CLI app",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js"
+  },
+  "keywords": ["pomodoro", "timer", "productivity"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "@types/node": "^20.10.0"
+  }
+}
