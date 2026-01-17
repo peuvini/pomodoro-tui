@@ -13,6 +13,7 @@ import type {
   JamConnectionState,
 } from "./types";
 import { DEFAULT_CONFIG } from "./types";
+import { checkForUpdates, performUpdate, getCurrentVersion } from "./updater";
 
 interface JamConfig {
   enabled: boolean;
@@ -42,6 +43,8 @@ Options:
   -c, --cycles <number>    Pomodoros before long break (default: ${DEFAULT_CONFIG.pomodorosBeforeLongBreak})
   -d, --data <path>        Path to history JSON file (default: ~/.pomodoro/history.json)
   -m, --music <mode>       Music mode: radio, off (default: radio)
+  -v, --version            Show version number
+  --update                 Check for and install updates
   -h, --help               Show this help message
 
 Jam Session (collaborative mode):
@@ -74,6 +77,16 @@ History:
 `);
 }
 
+async function handleUpdateCommand(): Promise<void> {
+  try {
+    await performUpdate();
+  } catch (error) {
+    console.error(`Update failed: ${error instanceof Error ? error.message : error}`);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
 function parseConfig(): AppConfig | null {
   try {
     const { values } = parseArgs({
@@ -86,6 +99,8 @@ function parseConfig(): AppConfig | null {
         data: { type: "string", short: "d" },
         music: { type: "string", short: "m" },
         help: { type: "boolean", short: "h" },
+        version: { type: "boolean", short: "v" },
+        update: { type: "boolean" },
         // Jam session options
         host: { type: "boolean" },
         join: { type: "string" },
@@ -97,6 +112,16 @@ function parseConfig(): AppConfig | null {
 
     if (values.help) {
       showHelp();
+      return null;
+    }
+
+    if (values.version) {
+      console.log(`pomotui version ${getCurrentVersion()}`);
+      return null;
+    }
+
+    if (values.update) {
+      handleUpdateCommand();
       return null;
     }
 
@@ -264,6 +289,7 @@ function PomodoroTUI({ config }: PomodoroTUIProps) {
   const [state, setState] = useState<PomodoroState>(pomodoro.getState());
   const [todayStats, setTodayStats] = useState(history.getTodayStats());
   const [musicStatus, setMusicStatus] = useState(music.getStatusText());
+  const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
 
   // Jam session state
   const [jamManager, setJamManager] = useState<JamManager | null>(null);
@@ -285,6 +311,17 @@ function PomodoroTUI({ config }: PomodoroTUIProps) {
 
   const isJamMode = config.jam.enabled;
   const canControl = !isJamMode || isCurrentHost;
+
+  // Non-blocking version check on startup
+  useEffect(() => {
+    checkForUpdates()
+      .then((result) => {
+        if (result.updateAvailable) {
+          setUpdateAvailable(result.latestVersion);
+        }
+      })
+      .catch(() => {}); // Silently ignore errors
+  }, []);
 
   useEffect(() => {
     pomodoro.setOnTick((newState) => {
@@ -423,6 +460,12 @@ function PomodoroTUI({ config }: PomodoroTUIProps) {
       <Text bold color="white">
         POMODORO TIMER
       </Text>
+      {updateAvailable && (
+        <Box marginY={1} flexDirection="column" alignItems="center">
+          <Text color="yellow">Update available: {updateAvailable}</Text>
+          <Text color="gray">(run pomotui --update)</Text>
+        </Box>
+      )}
       <Box marginY={1}>
         <Text bold color={color}>
           {label}
