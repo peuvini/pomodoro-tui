@@ -1,6 +1,8 @@
-import type { Subprocess } from 'bun';
-import { existsSync, unlinkSync } from 'fs';
-import { connect } from 'net';
+import type { Subprocess } from "bun";
+import { existsSync, unlinkSync } from "fs";
+import { connect } from "net";
+import { tmpdir } from "os";
+import { join } from "path";
 
 export interface MusicStatus {
   isPlaying: boolean;
@@ -18,36 +20,36 @@ export interface LofiStation {
 // Curated list of lofi radio streams
 export const LOFI_STATIONS: LofiStation[] = [
   {
-    name: 'Lofi Girl',
-    url: 'https://play.streamafrica.net/lofiradio',
+    name: "Lofi Girl",
+    url: "https://play.streamafrica.net/lofiradio",
   },
   {
-    name: 'ChillHop',
-    url: 'https://streams.fluxfm.de/Chillhop/mp3-128/streams.fluxfm.de/',
+    name: "ChillHop",
+    url: "https://streams.fluxfm.de/Chillhop/mp3-128/streams.fluxfm.de/",
   },
   {
-    name: 'Box Lofi',
-    url: 'https://stream.zeno.fm/f3wvbbqmdg8uv',
+    name: "Box Lofi",
+    url: "https://stream.zeno.fm/f3wvbbqmdg8uv",
   },
   {
-    name: 'Lofi Cafe',
-    url: 'https://stream.zeno.fm/0r0xa792kwzuv',
+    name: "Lofi Cafe",
+    url: "https://stream.zeno.fm/0r0xa792kwzuv",
   },
   {
-    name: 'Study Beats',
-    url: 'https://stream.zeno.fm/yn65fsaurfhvv',
+    name: "Study Beats",
+    url: "https://stream.zeno.fm/yn65fsaurfhvv",
   },
   {
-    name: 'Antena 1',
-    url: 'https://radio.garden/api/ara/content/listen/Q6JROd6G/channel.mp3',
+    name: "Antena 1",
+    url: "https://radio.garden/api/ara/content/listen/Q6JROd6G/channel.mp3",
   },
   {
-    name: 'FM Sergipe',
-    url: 'https://radio.garden/api/ara/content/listen/EQzCDHL3/channel.mp3',
+    name: "FM Sergipe",
+    url: "https://radio.garden/api/ara/content/listen/EQzCDHL3/channel.mp3",
   },
   {
-    name: 'Smooth Jazz',
-    url: 'https://radio.garden/api/ara/content/listen/1vlrqH6v/channel.mp3',
+    name: "Smooth Jazz",
+    url: "https://radio.garden/api/ara/content/listen/1vlrqH6v/channel.mp3",
   },
 ];
 
@@ -61,15 +63,20 @@ export class RadioPlayer {
 
   constructor(initialVolume: number = 50) {
     this.volume = Math.max(0, Math.min(100, initialVolume));
-    this.mpvSocketPath = `/tmp/pomotui-mpv-${process.pid}.sock`;
+    // Windows uses named pipes, Unix uses socket files
+    if (process.platform === "win32") {
+      this.mpvSocketPath = `\\\\.\\pipe\\pomotui-mpv-${process.pid}`;
+    } else {
+      this.mpvSocketPath = join(tmpdir(), `pomotui-mpv-${process.pid}.sock`);
+    }
     this.detectPlayer();
   }
 
   private detectPlayer(): void {
     // Try to find an available audio player
-    const players = ['mpv'];
+    const players = ["mpv"];
     // Use 'where' on Windows, 'which' on Unix-like systems
-    const whichCommand = process.platform === 'win32' ? 'where' : 'which';
+    const whichCommand = process.platform === "win32" ? "where" : "which";
 
     for (const player of players) {
       try {
@@ -102,9 +109,9 @@ export class RadioPlayer {
     try {
       const args = this.getPlayerArgs(station.url);
       this.process = Bun.spawn([this.playerCommand, ...args], {
-        stdin: 'ignore',
-        stdout: 'ignore',
-        stderr: 'ignore',
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
       });
       this.isPlaying = true;
       return true;
@@ -115,8 +122,8 @@ export class RadioPlayer {
 
   private getPlayerArgs(url: string): string[] {
     return [
-      '--no-video',
-      '--really-quiet',
+      "--no-video",
+      "--really-quiet",
       `--volume=${this.volume}`,
       `--input-ipc-server=${this.mpvSocketPath}`,
       url,
@@ -125,11 +132,12 @@ export class RadioPlayer {
 
   private sendMpvCommand(command: unknown[]): void {
     if (!this.isPlaying) return;
-    if (!existsSync(this.mpvSocketPath)) return;
+    // On Windows, named pipes don't exist as files, so skip the existsSync check
+    if (process.platform !== "win32" && !existsSync(this.mpvSocketPath)) return;
 
     try {
       const socket = connect(this.mpvSocketPath);
-      const message = JSON.stringify({ command }) + '\n';
+      const message = JSON.stringify({ command }) + "\n";
       socket.write(message);
       socket.end();
     } catch {
@@ -138,6 +146,9 @@ export class RadioPlayer {
   }
 
   private cleanupSocket(): void {
+    // Windows named pipes are automatically cleaned up, no need to unlink
+    if (process.platform === "win32") return;
+
     try {
       if (existsSync(this.mpvSocketPath)) {
         unlinkSync(this.mpvSocketPath);
@@ -176,7 +187,8 @@ export class RadioPlayer {
   nextStation(): void {
     const wasPlaying = this.isPlaying;
     this.stop();
-    this.currentStationIndex = (this.currentStationIndex + 1) % LOFI_STATIONS.length;
+    this.currentStationIndex =
+      (this.currentStationIndex + 1) % LOFI_STATIONS.length;
     if (wasPlaying) {
       this.play();
     }
@@ -185,7 +197,9 @@ export class RadioPlayer {
   previousStation(): void {
     const wasPlaying = this.isPlaying;
     this.stop();
-    this.currentStationIndex = (this.currentStationIndex - 1 + LOFI_STATIONS.length) % LOFI_STATIONS.length;
+    this.currentStationIndex =
+      (this.currentStationIndex - 1 + LOFI_STATIONS.length) %
+      LOFI_STATIONS.length;
     if (wasPlaying) {
       this.play();
     }
@@ -225,7 +239,7 @@ export class RadioPlayer {
 
     // Use IPC to change volume without restart
     if (this.isPlaying) {
-      this.sendMpvCommand(['set_property', 'volume', this.volume]);
+      this.sendMpvCommand(["set_property", "volume", this.volume]);
     }
   }
 
@@ -246,24 +260,24 @@ export class RadioPlayer {
   }
 }
 
-export type MusicMode = 'radio' | 'off';
+export type MusicMode = "radio" | "off";
 
 export class MusicManager {
   private mode: MusicMode;
   private radio: RadioPlayer;
 
-  constructor(mode: MusicMode = 'radio', initialVolume: number = 50) {
+  constructor(mode: MusicMode = "radio", initialVolume: number = 50) {
     this.mode = mode;
     this.radio = new RadioPlayer(initialVolume);
   }
 
   async play(): Promise<boolean> {
-    if (this.mode === 'off') return false;
+    if (this.mode === "off") return false;
     return this.radio.play();
   }
 
   stop(): void {
-    if (this.mode === 'radio') {
+    if (this.mode === "radio") {
       this.radio.stop();
     }
   }
@@ -277,27 +291,27 @@ export class MusicManager {
   }
 
   async toggle(): Promise<boolean> {
-    if (this.mode === 'radio') {
+    if (this.mode === "radio") {
       return this.radio.toggle();
     }
     return false;
   }
 
   nextStation(): void {
-    if (this.mode === 'radio') {
+    if (this.mode === "radio") {
       this.radio.nextStation();
     }
   }
 
   getStatusText(): string {
-    if (this.mode === 'off') {
-      return 'Music: Off';
+    if (this.mode === "off") {
+      return "Music: Off";
     }
 
     // Radio mode
     const status = this.radio.getStatus();
-    const icon = status.isPlaying ? '♪' : '♪';
-    const state = status.isPlaying ? '' : ' (paused)';
+    const icon = status.isPlaying ? "♪" : "♪";
+    const state = status.isPlaying ? "" : " (paused)";
     return `${icon} ${status.stationName}${state} [${status.volume}%]`;
   }
 
@@ -306,14 +320,14 @@ export class MusicManager {
   }
 
   isPlaying(): boolean {
-    if (this.mode === 'radio') {
+    if (this.mode === "radio") {
       return this.radio.getStatus().isPlaying;
     }
     return false;
   }
 
   hasPlayer(): boolean {
-    if (this.mode === 'radio') {
+    if (this.mode === "radio") {
       return this.radio.getAvailablePlayer() !== null;
     }
     return true;
