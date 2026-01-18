@@ -22,6 +22,10 @@ export class SettingsManager {
 
   private load(): Settings {
     try {
+      const fs = require('fs');
+      if (!fs.existsSync(this.filePath)) {
+        return { ...DEFAULT_SETTINGS };
+      }
       const file = Bun.file(this.filePath);
       if (file.size === 0) {
         return { ...DEFAULT_SETTINGS };

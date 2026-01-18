@@ -15,6 +15,10 @@ export class TaskManager {
 
   private load(): Task[] {
     try {
+      const fs = require('fs');
+      if (!fs.existsSync(this.filePath)) {
+        return [];
+      }
       const file = Bun.file(this.filePath);
       if (file.size === 0) {
         return [];

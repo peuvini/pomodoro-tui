@@ -9,11 +9,16 @@
     "typescript": "^5.3.0"
   },
   "description": "A Pomodoro timer TUI app",
-  "keywords": ["pomodoro", "timer", "productivity", "tui"],
+  "keywords": [
+    "pomodoro",
+    "timer",
+    "productivity",
+    "tui"
+  ],
   "license": "MIT",
   "scripts": {
     "start": "bun run src/index.tsx",
-    "dev": "bun --watch run src/index.tsx",
+    "dev": "bun run start",
     "build": "bun build src/index.tsx --compile --outfile pomotui",
     "build:darwin-arm64": "bun build src/index.tsx --compile --target=bun-darwin-arm64 --outfile pomotui-darwin-arm64",
     "build:darwin-x64": "bun build src/index.tsx --compile --target=bun-darwin-x64 --outfile pomotui-darwin-x64",
